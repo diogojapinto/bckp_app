@@ -9,13 +9,14 @@
 #include <ctype.h>
 #include <string.h>
 #include <time.h>
+#include <fcntl.h>
 
 /**
  * macros
  */
 #define MAXBUFFER 500
-#define TIME_LENGTH 19
-#define NR_TIME_ELEMS 6
+#define TIME_LENGTH 500
+#define NR_TIME_ELEMS 20
 
 char *pathS;
 char *pathD;
@@ -23,8 +24,8 @@ DIR *dirS;
 DIR *dirD;
 
 char* createDestFolder();
-int areFilesModified(struct dirent s, struct dirent d);
-int copyFiles(struct dirent s, struct dirent d);
+int areFilesModified(const char *path_s, const char *path_d);
+int copyFiles(const char *path_s, const char *path_d);
 int fullBackup(char * dest);
 int incrementalBackup(char * dest);
 
@@ -33,6 +34,7 @@ int main(int argc, char *argv[]) {
   
   // sets the umask, to make shure it is possible to create the files as the
   // current user
+  //setbuf(stdout, NULL);
   umask(~(S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP |S_IROTH));
   
   /**
@@ -55,7 +57,7 @@ int main(int argc, char *argv[]) {
     }
   }
   
-  int time_frame = atoi(argv[3]);
+  //int time_frame = atoi(argv[3]);
   
   // cuts the paths untill the last directory on it, get the absolute paths, and verify them
   
@@ -117,6 +119,14 @@ int main(int argc, char *argv[]) {
   
   strcpy(pathD, tmp);
   
+  if ((dirS = opendir(pathS)) == NULL) {
+      perror("opendir(pathS)");
+  }
+  
+  if ((dirD = opendir(pathD)) == NULL) {
+      perror("opendir(pathD)");
+  }
+  
   /**
    * end of arguments verification
    */
@@ -136,35 +146,42 @@ int main(int argc, char *argv[]) {
  * the local time
  */
 char* createDestFolder() {
-  struct tm local_time;
-  if (time(e) == NULL) {
+  struct tm *local_time;
+  time_t current_time;
+  if (time(&current_time) == NULL) {
     perror("time()");
     exit(-1);
   }
   
-  if (localtime(&local_time) == NULL) {
+  if ((local_time = localtime(&current_time)) == NULL) {
     perror("localtime()");
     exit(-1);
   }
   
   char dir_name[TIME_LENGTH];
-  if (sprintf(dir_name, "%d_%d_%d_%d_%d_%d", local_time.tm_year + 1900, local_time.tm_mon + 1,
-    local_time.tm_mday, local_time.tm_hour, local_time.tm_min, local_time.tm_sec ) != NR_TIME_ELEMS) {
+  dir_name[0] = "\0";
+  
+  if (sprintf(dir_name, "%d_%d_%d_%d_%d_%d", local_time->tm_year + 1900, local_time->tm_mon + 1,
+    local_time->tm_mday, local_time->tm_hour, local_time->tm_min, local_time->tm_sec ) >= NR_TIME_ELEMS) {
     write(STDERR_FILENO, "error in naming the folder\n", 27);
   exit(-1);
     }
     
     // concatenate the dir_name with the destination folder
+    char *tmp_dir = NULL;
+    
     if (tmp_dir == NULL) {
       tmp_dir = malloc(sizeof(char) * PATH_MAX);
     } else {
       free(tmp_dir);
       tmp_dir = malloc(sizeof(char) * PATH_MAX);
     }
-    strcpy(tmp, pathD);
-    strcat(tmp, dir_name);
     
-    if (mkdir(tmp, S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IROTH)) {
+    strcpy(tmp_dir, pathD);
+    strcat(tmp_dir, "/");
+    strcat(tmp_dir, dir_name);
+    
+    if (mkdir(tmp_dir, S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IROTH)) {
       perror("mkdir()");
       exit(-1);
     }
@@ -179,7 +196,7 @@ char* createDestFolder() {
  * but there is the possibility of a file being modified in a time interval lower than one second)
  */
 int areFilesModified(const char *path_s, const char *path_d) {
-  FILE source, destination;
+  int source, destination;
   char cs, cd;
   
   // tries to open the files
@@ -216,29 +233,27 @@ int areFilesModified(const char *path_s, const char *path_d) {
 }
 
 int copyFiles(const char *path_s, const char *path_d) {
-  FILE source, destination;
+  int source, destination;
   char c;
   
   // tries to open the files
-  if ((source =open(s.d_name, O_RDONLY) ) == -1) {
-    perror("open()");
+  if ((source =open(path_s, O_RDONLY) ) == -1) {
+    perror("openS()");
     exit(-1);
   }
   
-  if ((destination = open(d.d_name, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IROTH)) == -1) {
-    perror("open()");
+  if ((destination = open(path_d, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IROTH)) == -1) {
+    perror("openD()");
     exit(-1);
   }
   
+  read(source, &c, 1);
   do {
-    // reads a char from the files
-    if (read(source, &c, 1)) {
-      if (write(destination, c, 1) == 0) {
+      if (write(destination, &c, 1) == 0) {
 	perror("write()");
 	exit(-1);
       }
-    }
-  } while ( c != '\0');
+  } while (read(source, &c, 1));
   
   // closes the files compared
   close(source);
@@ -251,18 +266,21 @@ int fullBackup(char * dest) {
   while((src = readdir(dirS)) != NULL) {
     char tmp_s[PATH_MAX];
     strcpy(tmp_s, pathS);
-    strcat(tmp_s,'/');
+    strcat(tmp_s,"/");
     strcat(tmp_s,src->d_name);
     char tmp_d[PATH_MAX];
     strcpy(tmp_d, dest);
-    strcat(tmp_d,'/');
+    strcat(tmp_d,"/");
     strcat(tmp_d,src->d_name);
     copyFiles(tmp_s, tmp_d);
   }
+  
+  return 0;
 }
 
 int incrementalBackup(char * dest) {
   
+  return 0;
 }
 
 void exitHandler(void) {
