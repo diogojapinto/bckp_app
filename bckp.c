@@ -24,58 +24,75 @@ int main(int argc, char *argv[]) {
   // if the program was not used correctly:
   if (argc != 4)
   {
-    printf("usage: %s <source-directory> <destination-directory> <time-interval-between-backups>", argv[0]);
+    printf("usage: %s <source-directory> <destination-directory> <time-interval-between-backups>\n", argv[0]);
     return -1;
   }
   
   // verifies if the 3rd arg is an integer
-  /*char *c;
-   * for ( c = argv[3]; c != NULL;) {
-   *   if (!isdigit(*c)) {
-   *     printf("the 3rd argument must me an integer\n");
-   *     return -1;
-} else {
-  c++;
-}
-}*/
+  char *c;
+  for ( c = argv[3]; c != NULL;) {
+    if (!isdigit(*c)) {
+      printf("the 3rd argument must me an integer\n");
+      return -1;
+    } else {
+      c++;
+    }
+  }
   
   // cuts the paths untill the last directory on it, get the absolute paths, and verify them
   
   pathS = argv[1];
   pathD = argv[2];
-  char *tmp;
+  char *tmp = malloc(sizeof(char)*PATH_MAX);
   
   struct stat temp_dir;
   
-  stat(pathS, &temp_dir);
-  tmp = pathS;
-  if (!S_ISDIR(temp_dir.st_mode)) {
-    
-    if ((tmp = dirname(pathS)) == NULL) {
-      perror("dirname");
-      return -1;
-    }
-  }
-  
-  if (realpath(tmp, pathS) == NULL) {
+  if (realpath(pathS, tmp) == NULL) {
     perror("realpath");
     return -1;
   }
   
   
-  stat(pathD, &temp_dir);
-  tmp = pathD;
+  if (stat(tmp, &temp_dir) == -1) {
+    perror("statS");
+    return -1;
+  }
+  
   if (!S_ISDIR(temp_dir.st_mode)) {
     
-    if ((tmp = dirname(pathD)) == NULL) {
+    if ((tmp = dirname(tmp)) == NULL) {
       perror("dirname");
       return -1;
     }
   }
   
-  if (realpath(tmp, pathD) == NULL) {
+  pathS = tmp;
+  
+  int dirD_exists = mkdir("README.md",S_IRUSR | S_IWUSR | S_IXUSR | S_IROTH);
+  
+  mkdir("README.md",S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IROTH);
+  
+  if (realpath(pathD, tmp) == NULL) {
     perror("realpath");
     return -1;
+  }
+  
+  if (stat(tmp, &temp_dir) == -1) {
+    perror("statD");
+    return -1;
+  }
+  
+  if (!S_ISDIR(temp_dir.st_mode)) {
+    if ((tmp = dirname(tmp)) == NULL) {
+      perror("dirname");
+      return -1;
+    }
+  }
+  
+  pathD = tmp;
+  
+  if (dirD_exists == 0) {
+    printf("created %s\n", pathD);
   }
   
   // open the source and destination directories
@@ -89,7 +106,6 @@ int main(int argc, char *argv[]) {
     return -1;
   }
   
-  printf("%s\n%s\n",pathS,pathD);
   return 0;
 }
 
