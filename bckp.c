@@ -161,7 +161,7 @@ int main(int argc, char *argv[]) {
   char* bckp_dest = createDestFolder();
   fullBackup(bckp_dest);
   
-  while(true) {
+  while(1) {
     sleep(time_frame);
     bckp_dest = createDestFolder();
     incrementalBackup(bckp_dest);
@@ -404,7 +404,7 @@ int incrementalBackup(char * dest) {
   /*
    * copied
    */
-  
+  struct dirent *src = NULL;
   rewinddir(dirD);
   while((src = readdir(dirS)) != NULL) {
     struct stat st_src;
@@ -459,16 +459,15 @@ int incrementalBackup(char * dest) {
 }
 
 int loadDestDirectories() {
-  bckp_directories = malloc(sizeof(bckp_direct));
   bckp_directories = malloc(sizeof(char*) * MAX_NR_FOLDERS);
   int i = 0;
   rewinddir(dirD);
-  struct
+  struct dirent *dest_f;
   while((dest_f = readdir(dirD)) != NULL) {
     bckp_directories[i] = malloc(sizeof(char) * PATH_MAX);
-    strcpy(bckp_directories, pathD);
+    strcpy(bckp_directories[i], pathD);
     strcat(bckp_directories[i], "/");
-    strcat(bckp_directories[i], dest_f);
+    strcat(bckp_directories[i], dest_f->d_name);
     
     struct stat st;
     if (stat(bckp_directories[i], &st)) {
@@ -477,8 +476,9 @@ int loadDestDirectories() {
     }
     
     if (S_ISDIR(st.st_mode)) {
-      write(STDOUT_FILENO, "Destination folder has no backup directories.\n", 47);
-      exit(-1);
+    } else {
+      free(bckp_directories[i]);
+      continue;
     }
     
     ++i;
