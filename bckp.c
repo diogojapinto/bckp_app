@@ -70,7 +70,8 @@ int main(int argc, char *argv[]) {
   // if the program was not used correctly:
   if (argc != 4)
   {
-    printf("usage: %s <source-directory> <destination-directory> <time-interval-between-backups>\n", argv[0]);
+    printf("usage: %s <source-directory> <destination-directory> 
+<time-interval-between-backups>\n", argv[0]);
     exit(-1);
   }
   
@@ -85,7 +86,8 @@ int main(int argc, char *argv[]) {
   
   int time_frame = atoi(argv[3]);
   
-  // cuts the paths untill the last directory on it, get the absolute paths, and verify them
+  // cuts the paths untill the last directory on it, get the absolute paths, and 
+verify them
   
   pathS = malloc(sizeof(char) * PATH_MAX);
   pathD = malloc(sizeof(char) * PATH_MAX);
@@ -118,7 +120,8 @@ int main(int argc, char *argv[]) {
   strcpy(pathS, tmp);
   
   // create the destination directory if it not exists
-  int dirD_exists = mkdir(pathD, S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IROTH);
+  int dirD_exists = mkdir(pathD, S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | 
+S_IROTH);
   
   if (realpath(pathD, tmp) == NULL) {
     perror("realpath()");
@@ -171,7 +174,8 @@ int main(int argc, char *argv[]) {
 }
 
 /**
- * creates the destination folder for the backup, with the the name corresponding to
+ * creates the destination folder for the backup, with the the name 
+corresponding to
  * the local time
  */
 char* createDestFolder() {
@@ -189,8 +193,10 @@ char* createDestFolder() {
   
   char dir_name[TIME_LENGTH];
   
-  if (sprintf(dir_name, "%d_%d_%d_%d_%d_%d", local_time->tm_year + 1900, local_time->tm_mon + 1,
-    local_time->tm_mday, local_time->tm_hour, local_time->tm_min, local_time->tm_sec ) >= NR_TIME_ELEMS) {
+  if (sprintf(dir_name, "%d_%d_%d_%d_%d_%d", local_time->tm_year + 1900, 
+local_time->tm_mon + 1,
+    local_time->tm_mday, local_time->tm_hour, local_time->tm_min, 
+local_time->tm_sec ) >= NR_TIME_ELEMS) {
     write(STDERR_FILENO, "error in naming the folder\n", 27);
   exit(-1);
     }
@@ -220,8 +226,10 @@ char* createDestFolder() {
 /**
  * return 1 if files are different, 0 otherwise
  * 
- * (could have used the field st_mtime from the stat structure correspondent to the source files
- * but there is the possibility of a file being modified in a time interval lower than one second)
+ * (could have used the field st_mtime from the stat structure correspondent to 
+the source files
+ * but there is the possibility of a file being modified in a time interval 
+lower than one second)
  */
 int isFileModified(const char *path_s, const char *path_d) {
   int source, destination;
@@ -270,7 +278,8 @@ int copyFiles(const char *path_s, const char *path_d) {
     exit(-1);
   }
   
-  if ((destination = open(path_d, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IROTH)) == -1) {
+  if ((destination = open(path_d, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR | 
+S_IXUSR | S_IRGRP | S_IROTH)) == -1) {
     perror("open()");
     exit(-1);
   }
@@ -322,7 +331,8 @@ int fullBackup(char * dest) {
   return 0;
 }
 
-int updateBackupInfo(const char *dest, const char *name, const struct stat *st) {
+int updateBackupInfo(const char *dest, const char *name, const struct stat *st) 
+{
   int info_file = 0;
   char path_info[PATH_MAX];
   strcpy(path_info, dest);
@@ -336,7 +346,8 @@ int updateBackupInfo(const char *dest, const char *name, const struct stat *st) 
   
   close(info_file);
   
-  if ((info_file = open(path_info, O_RDWR | O_CREAT | O_APPEND, S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IROTH)) == -1) {
+  if ((info_file = open(path_info, O_RDWR | O_CREAT | O_APPEND, S_IRUSR | 
+S_IWUSR | S_IXUSR | S_IRGRP | S_IROTH)) == -1) {
     perror("open()");
     exit(-1);
   }
@@ -381,8 +392,10 @@ int updateBackupInfo(const char *dest, const char *name, const struct stat *st) 
   }
   
   char time[TIME_LENGTH];
-  int time_size = sprintf(time, "%d_%d_%d_%d_%d_%d", tm_file->tm_year + 1900, tm_file->tm_mon + 1,
-			  tm_file->tm_mday, tm_file->tm_hour, tm_file->tm_min, tm_file->tm_sec );
+  int time_size = sprintf(time, "%d_%d_%d_%d_%d_%d", tm_file->tm_year + 1900, 
+tm_file->tm_mon + 1,
+			  tm_file->tm_mday, tm_file->tm_hour, tm_file->tm_min, 
+tm_file->tm_sec );
   write(info_file, time, time_size);
   
   close(info_file);
@@ -492,9 +505,9 @@ int loadDestDirectories() {
 int sortDirectories() {
   int i = 0;
   int j = 0;      
-  char *dirI = malloc(sizeof(char) * TIME_LENGTH);
-  char *dirJ = malloc(sizeof(char) * TIME_LENGTH);
-  char *dirTemp = malloc(sizeof(char) * TIME_LENGTH);
+  char dirI[PATH_MAX];
+  char dirJ[PATH_MAX];
+  char dirTemp[PATH_MAX];
   if (bckp_directories != NULL) {
     for(i = 0;bckp_directories[i] != NULL;j++) {
       for(j = 0; bckp_directories[j] != NULL;j++) {
@@ -521,7 +534,34 @@ int sortDirectories() {
     return -1;
   }
   
-}  
+}
+
+int readBckpInfo(char *filePath) {
+  
+  int i=0;
+  char fileName[PATH_MAX];
+  char fileNameS[PATH_MAX];
+  strcpy(fileName, basename(filePath);
+  struct dirent *dirBckp;
+  DIR *dateFolder;
+  
+  for (i=0; bckp_directories[i] != NULL; i++) {
+    
+    dateFolder = opendir(bckp_directories[i]);
+    while ((dirBckp = readdir(dateFolder)) != NULL) {
+      
+      if (strcmp(fileName,dirBckp->d_name) == 0) {
+	strcpy(fileNameS,pathS);
+	strcat(fileNameS,"/");
+	strcat(fileNameS,fileName);
+	
+	return isFileModified(fileNameS,filePath);
+	
+      }
+    }
+  }
+}
+
 
 void exitHandler(void) {
   free(pathS);
