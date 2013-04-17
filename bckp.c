@@ -21,9 +21,15 @@
 /**
  * macros
  */
-#define MAXBUFFER 500
+#define MAXBUFFER 1000
 #define TIME_LENGTH 500
 #define NR_TIME_ELEMS 20
+#define _GNU_SOURCE
+
+struct bckp_direct {
+  int last_elem_pos;
+  char **directories;
+};
 
 char *pathS;
 char *pathD;
@@ -165,7 +171,7 @@ int main(int argc, char *argv[]) {
 char* createDestFolder() {
   struct tm *local_time;
   time_t current_time;
-  if (time(&current_time) == NULL) {
+  if (time(&current_time) == -1) {
     perror("time()");
     exit(-1);
   }
@@ -176,7 +182,6 @@ char* createDestFolder() {
   }
   
   char dir_name[TIME_LENGTH];
-  dir_name[0] = "\0";
   
   if (sprintf(dir_name, "%d_%d_%d_%d_%d_%d", local_time->tm_year + 1900, local_time->tm_mon + 1,
     local_time->tm_mday, local_time->tm_hour, local_time->tm_min, local_time->tm_sec ) >= NR_TIME_ELEMS) {
@@ -268,7 +273,7 @@ int copyFiles(const char *path_s, const char *path_d) {
   do {
     if (write(destination, &c, 1) == 0) {
       perror("write()");
-    exit(-1);
+      exit(-1);
     }
   } while (read(source, &c, 1));
   
@@ -305,6 +310,7 @@ int fullBackup(char * dest) {
     strcat(tmp_d,"/");
     strcat(tmp_d,src->d_name);
     copyFiles(tmp_s, tmp_d);
+    updateBackupInfo(dest, src->d_name, &st_src);
   }
   
   return 0;
@@ -332,23 +338,21 @@ int updateBackupInfo(const char *dest, const char *name, const struct stat *st) 
   
   // name of the file
   write(info_file, ident_name, size_ident_name);
-  write(info_file, name, strlen(nm->pw_name));
-  write(info_file, "\n", 1);
   
   // owner's name
   write(info_file, ident_owner, size_ident_owner);
-  struct passwd unm;
-  if (getpw(st->st_uid, &unm)) {
+  struct passwd *unm;
+  if ((unm = getpwuid(st->st_uid)) == NULL) {
     perror("getpw()");
     exit(-1);
   }
-  write(info_file, nm->pw_name, strlen(unm->pw_name));
+  write(info_file, unm->pw_name, strlen(unm->pw_name));
   write(info_file, "\n", 1);
   
   // files's size
   write(info_file, ident_size, size_ident_size);
   char fs[TIME_LENGTH];
-  int fs_size = sprintf(fs, "%d", st->st_size);
+  int fs_size = sprintf(fs, "%d", (int)st->st_size);
   write(info_file, fs, fs_size);
   write(info_file, "\n", 1);
   
@@ -356,18 +360,17 @@ int updateBackupInfo(const char *dest, const char *name, const struct stat *st) 
   write(info_file, ident_modified, size_ident_modified);
   
   struct tm *tm_file;
-  if ((tm_file = localtime(&(st->st_mtime)) == NULL) {
+  if ((tm_file = localtime(&(st->st_mtime))) == NULL) {
     perror("localtime()");
     exit(-1);
   }
   
-  char dir_name[TIME_LENGTH];
-  dir_name[0] = "\0";
-  char time[];
+  char time[TIME_LENGTH];
   int time_size = sprintf(time, "%d_%d_%d_%d_%d_%d", tm_file->tm_year + 1900, tm_file->tm_mon + 1,
-    tm_file->tm_mday, tm_file->tm_hour, tm_file->tm_min, tm_file->tm_sec );
+			  tm_file->tm_mday, tm_file->tm_hour, tm_file->tm_min, tm_file->tm_sec );
   write(info_file, time, time_size);
   
+  return 0;
 }
 
 int incrementalBackup(char * dest) {
