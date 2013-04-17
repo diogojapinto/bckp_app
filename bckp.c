@@ -27,6 +27,9 @@
 #define _GNU_SOURCE
 #define MAX_NR_FOLDERS 64000
 
+#DEFINE FILES_EQUAL 0
+#DEFINE FILES_DIFFERENT 1
+
 // array of pathnames of the destination folders created
 char **bckp_directories;
 
@@ -243,12 +246,12 @@ int isFileModified(const char *path_s, const char *path_d) {
     if (read(source, &cs, 1) != read(destination, &cd, 1)) {
       close(source);
       close(destination);
-      return 1;
+      return FILES_DIFFERENT;
     } else {
       if (cs != cd) {
 	close(source);
 	close(destination);
-	return 1;
+	return FILES_DIFFERENT;
       }
     }
     
@@ -257,7 +260,7 @@ int isFileModified(const char *path_s, const char *path_d) {
   // closes the files compared
   close(source);
   close(destination);
-  return 0;
+  return FILES_EQUAL;
 }
 
 int copyFiles(const char *path_s, const char *path_d) {
