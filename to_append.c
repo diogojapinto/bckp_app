@@ -32,10 +32,11 @@ int loadLine(int file_desc, char *str) {
   int size = 0;
   while(1) {
     size = read(file_desc, &c, 1);
+    if (size == 0) {
+      return -1;
+    }
     if (c == '\n') {
       return 0;
-    } else if (c == '\0') {
-      return -1;
     } else {
       str[i] = c;
       i++;
