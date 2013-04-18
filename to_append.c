@@ -1,69 +1,44 @@
-
-
-int sortDirectories() {
+char **loadPrevExistFiles(char *info_path) {
+  char **old_filepaths = malloc(sizeof(char *) * MAX_NR_FOLDERS);
+  char line[PATH_MAX];
+  int info_desc;
   int i = 0;
-  int j = 0;      
-  char dirI[PATH_MAX];
-  char dirJ[PATH_MAX];
-  char dirTemp[PATH_MAX];
-  if (bckp_directories != NULL) {
-    for(i = 0;bckp_directories[i] != NULL;j++) {
-      for(j = 0; bckp_directories[j] != NULL;j++) {
-	
-	if (bckp_directories[i] != bckp_directories[j]) {
-	  
-	  strcpy(dirI, basename(bckp_directories[i]));
-	  strcpy(dirJ, basename(bckp_directories[j]));
-	  
-	  if (strcmp(dirI,dirJ) < 0) {
-	    
-	    strcpy(dirTemp,bckp_directories[i]);
-	    strcpy(bckp_directories[i],bckp_directories[j]);
-	    strcpy(bckp_directories[j],dirTemp);
-	    
-	  }
-	}
-      }
-    }
-    return 0;
+  if ((info_desc = open(info_path)) == NULL) {
+    perror("open()");
+    exit(-1);
   }
-  else {
-    
-    return -1;
-  }
-  
-}
-
-int readBckpInfo(char *filePath) {
-  
-  int i=0;
-  char fileName[PATH_MAX];
-  char fileNameS[PATH_MAX];
-  strcpy(fileName, basename(filePath);
-  struct dirent *dirBckp;
-  DIR *dateFolder;
-  
-  for (i=0; bckp_directories[i] != NULL; i++) {
-    
-    dateFolder = opendir(bckp_directories[i]);
-    while ((dirBckp = readdir(dateFolder)) != NULL) {
-      
-      if (strcmp(fileName,dirBckp->d_name) == 0) {
-	strcpy(fileNameS,pathS);
-	strcat(fileNameS,"/");
-	strcat(fileNameS,fileName);
-	
-	return isFileModified(fileNameS,filePath);
-	
+  while(loadLine(info_desc, line) != -1) {
+    if (strlen(line) != 1) {
+      char tag[17];
+      char file_name[PATH_MAX];
+      sscanf("<%s> %s", tag, file_name);
+      if (srtcmp(tag, "name") == 0) {
+	old_filepaths[i] = malloc(sizeof(char) * PATH_MAX);
+	strcpy(old_filepaths[i], file_name);
+	i++;
       }
     }
   }
+  return old_filepaths;
 }
 
-
-
-
-
-
-
-
+/*
+ * return 0 if end of line
+ * return -1 if end of file
+ */
+int loadLine(int file_desc, char *str) {
+  char c;
+  int i = 0;
+  int size = 0;
+  while(1) {
+    size = read(file_desc, &c, 1);
+    if (c == '\n') {
+      return 0;
+    } else if (c == '\0') {
+      return -1;
+    } else {
+      str[i] = c;
+      i++;
+    }
+  }
+}
