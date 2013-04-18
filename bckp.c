@@ -235,7 +235,8 @@ char* createDestFolderName() {
  * 
  * (could have used the field st_mtime from the stat structure correspondent to 
  * t *h*e source files
- * but there is the possibility of a file being modified in a time interval 
+ * but there is the possibility of a file being modified in a time 
+ * interval 
  * lower than one second)
  */
 int isFileModified(const char *path_s, const char *path_d) {
@@ -277,7 +278,7 @@ int isFileModified(const char *path_s, const char *path_d) {
 }
 
 int copyFiles(const char *path_s, const char *path_d) {
-  if (isFileTemp(path_s)) {
+  if (isFileTemp(path_s) == -1) {
     return 0;
   }
   int source, destination;
@@ -577,6 +578,11 @@ int findPrevFile(char *filePath) {
   strcpy(fileName, basename(filePath));
   struct dirent *dirBckp;
   DIR *dateFolder;
+  
+  
+  if (isFileTemp(filePath) == -1) {
+    return FILES_EQUAL;
+  }
   
   for (i=0; bckp_directories[i] != NULL; i++) {
     
