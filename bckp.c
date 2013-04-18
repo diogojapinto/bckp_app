@@ -11,6 +11,7 @@
 #include <time.h>
 #include <fcntl.h>
 #include <pwd.h>
+#include <sys/wait.h>
 
 /**
  * macros
@@ -43,6 +44,7 @@ void createBckpInfo(const char *pathname);
 int loadLine(int file_desc, char *str);
 char **loadPrevExistFiles(char *info_path);
 int createBckpInfoDel();
+int createProcess(const char *path_s, const char *path_d);
 
 // array of pathnames of the destination folders created
 char **bckp_directories = NULL;
@@ -278,6 +280,7 @@ int isFileModified(const char *path_s, const char *path_d) {
 }
 
 int copyFiles(const char *path_s, const char *path_d) {
+  
   if (isFileTemp(path_s) == -1) {
     return 0;
   }
@@ -308,6 +311,7 @@ int copyFiles(const char *path_s, const char *path_d) {
     close(source);
     close(destination);
     return 0;
+    
 }
 
 int fullBackup(char * dest) {
@@ -342,7 +346,7 @@ int fullBackup(char * dest) {
     strcpy(tmp_d, dest);
     strcat(tmp_d,"/");
     strcat(tmp_d,src->d_name);
-    copyFiles(tmp_s, tmp_d);
+    createProcess(tmp_s, tmp_d);
     updateBackupInfo(dest, src->d_name, &st_src);
   }
   
@@ -351,6 +355,11 @@ int fullBackup(char * dest) {
 
 int updateBackupInfo(const char *dest, const char *name, const struct stat *st) 
 {
+  char filePath[PATH_MAX];
+  strcpy(filePath,dest);
+  strcat(filePath, "/");
+  strcat(filePath, name);
+  if (isFileTemp(filePath) != -1) {
   int info_file = 0;
   char path_info[PATH_MAX];
   strcpy(path_info, dest);
@@ -420,6 +429,8 @@ int updateBackupInfo(const char *dest, const char *name, const struct stat *st)
     close(info_file);
     
     return 0;
+  }
+  return 0;
 }
 
 int incrementalBackup(char * dest) {
@@ -473,7 +484,7 @@ int incrementalBackup(char * dest) {
 	}
 	state_dest = -1;
       }
-      copyFiles(tmp_s, tmp_d);
+      createProcess(tmp_s, tmp_d);
     }
   }
   
@@ -752,6 +763,30 @@ void createBckpInfo(const char *pathname) {
     strcat(tmp_d,src->d_name);
     updateBackupInfo(pathname, src->d_name, &st_src);
   }
+}
+
+int createProcess(const char *path_s, const char *path_d) {
+  
+  pid_t pid;
+  
+  pid = fork();
+  
+  if (pid == -1) {	//if fork returned an error
+    perror("fork()");
+    exit(-1);
+  }
+  else if (pid == 0) {		//if parent process wait for child to terminate
+    int *status = NULL;
+    if (waitpid(pid,status,0) == -1) {
+      perror("waitpid");
+      exit(-1);
+    }
+  }
+  else {		//if child process executes the backup
+    return copyFiles(path_s, path_d);
+  }
+  
+  return 0;
 }
 
 void exitHandler(void) {
