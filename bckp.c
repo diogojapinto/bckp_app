@@ -621,6 +621,15 @@ void createBckpInfo(const char *pathname) {
   }
 }
 
+char **loadPrevExistFiles(char *info_path) {
+  char **old_filepaths = malloc(sizeof(char *) * MAX_NR_FOLDERS);
+  char file_name[PATH_MAX];
+  if (open(info_path) == NULL) {
+    perror("open()");
+    exit(-1);
+  }
+}
+
 
 void exitHandler(void) {
   free(pathS);
