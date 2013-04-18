@@ -22,6 +22,8 @@
 #define MAX_NR_FOLDERS 64000
 #define FILES_EQUAL 0 
 #define FILES_DIFFERENT 1
+#define FILES_DELETED 1
+#define NO_FILES_DELETED 0
 
 const char CURR_DIR[] = ".";
 const char FATHER_DIR[] = "..";
@@ -38,6 +40,9 @@ int sortDirectories();
 int findPrevFile(char *filePath);
 int isFileTemp(const char *pathname);
 void createBckpInfo(const char *pathname);
+int loadLine(int file_desc, char *str);
+char **loadPrevExistFiles(char *info_path);
+int createBckpInfoDel();
 
 // array of pathnames of the destination folders created
 char **bckp_directories = NULL;
@@ -77,7 +82,8 @@ int main(int argc, char *argv[]) {
   
   // if the program was not used correctly:
   if (argc != 4) {
-    printf("usage: %s <source-directory> <destination-directory> <time-interval-between-backups>\n", argv[0]);
+    printf("usage: %s <source-directory> <destination-directory> ",argv[0]); 
+    printf("<time-interval-between-backups>\n");
     exit(-1);
   }
   
@@ -92,7 +98,8 @@ int main(int argc, char *argv[]) {
   
   int time_frame = atoi(argv[3]);
   
-  // cuts the paths untill the last directory on it, get the absolute paths, and verify them
+  // cuts the paths untill the last directory on it, get the absolute paths, and 
+//verify them
   
   pathS = malloc(sizeof(char) * PATH_MAX);
   pathD = malloc(sizeof(char) * PATH_MAX);
@@ -148,8 +155,8 @@ int main(int argc, char *argv[]) {
   }
   
   /*if (dirD_exists == 0) {
-    printf("created folder %s\n", pathD);
-  }*/
+   *   printf("created folder %s\n", pathD);
+}*/
   
   strcpy(pathD, tmp);
   
@@ -404,7 +411,8 @@ int updateBackupInfo(const char *dest, const char *name, const struct stat *st)
     char time[TIME_LENGTH];
     int time_size = sprintf(time, "%d_%d_%d_%d_%d_%d", tm_file->tm_year + 1900, 
 			    tm_file->tm_mon + 1,
-			    tm_file->tm_mday, tm_file->tm_hour, tm_file->tm_min, 
+			    tm_file->tm_mday, tm_file->tm_hour, 
+tm_file->tm_min, 
 			    tm_file->tm_sec );
     write(info_file, time, time_size);
     
@@ -471,9 +479,20 @@ int incrementalBackup(char * dest) {
   if (state_dest == -1) {
     createBckpInfo(dest);
   }
+  else if (state_dest == 0) {
+    if (createBckpInfoDel() == FILES_DELETED) {
+      if (mkdir(dest, S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IROTH)) {
+	perror("mkdir()");
+	exit(-1);
+      }
+      createBckpInfo(dest);
+    }
+  }
   
   return 0;
 }
+
+
 
 int loadDestDirectories() {
   bckp_directories = malloc(sizeof(char*) * MAX_NR_FOLDERS);
@@ -481,7 +500,8 @@ int loadDestDirectories() {
   rewinddir(dirD);
   struct dirent *dest_f;
   while((dest_f = readdir(dirD)) != NULL) {
-    if (strcmp(dest_f->d_name, CURR_DIR) == 0 || strcmp(dest_f->d_name, FATHER_DIR) == 0) {
+    if (strcmp(dest_f->d_name, CURR_DIR) == 0 || strcmp(dest_f->d_name, 
+FATHER_DIR) == 0) {
       continue;
     }
     char tmp[PATH_MAX];
@@ -523,8 +543,10 @@ int sortDirectories() {
 	strcpy(dirI, basename(bckp_directories[i]));
 	char dirJ[PATH_MAX];
 	strcpy(dirJ, basename(bckp_directories[j]));
-	sscanf(dirI, "%d_%d_%d_%d_%d_%d", &time_i[0], &time_i[1], &time_i[2], &time_i[3], &time_i[4], &time_i[5]);
-	sscanf(dirJ, "%d_%d_%d_%d_%d_%d", &time_j[0], &time_j[1], &time_j[2], &time_j[3], &time_j[4], &time_j[5]);
+	sscanf(dirI, "%d_%d_%d_%d_%d_%d", &time_i[0], &time_i[1], &time_i[2], 
+&time_i[3], &time_i[4], &time_i[5]);
+	sscanf(dirJ, "%d_%d_%d_%d_%d_%d", &time_j[0], &time_j[1], &time_j[2], 
+&time_j[3], &time_j[4], &time_j[5]);
 	int a;
 	for (a = 0; a < 6; a++) {
 	  if (time_i[a] < time_j[a]) {
@@ -585,6 +607,100 @@ int isFileTemp(const char *pathname) {
       return -1;
     } else {
       return 0;
+    }
+  }
+}
+
+int createBckpInfoDel() {
+  struct dirent *src = NULL;
+  rewinddir(dirS);
+  while((src = readdir(dirS)) != NULL) {
+    struct stat st_src;
+    
+    // prepares the pathnames for source file
+    char tmp_s[PATH_MAX];
+    strcpy(tmp_s, pathS);
+    strcat(tmp_s,"/");
+    strcat(tmp_s,src->d_name);
+    
+    // verifies if the source file is regular
+    if (lstat(tmp_s, &st_src) == -1) {
+      perror("lstat()");
+      exit(-1);
+    }
+    
+    if (S_ISREG(st_src.st_mode)) {
+    } else {
+      continue;
+    }
+    char path_info[PATH_MAX];
+    strcpy(path_info, bckp_directories[0]);
+    strcat(path_info, "/");
+    strcat(path_info, "__bckpinfo__");
+    char** bckpInfoFiles = loadPrevExistFiles(path_info);
+    int i = 0;
+    int found = 0;
+    printf("\n%s\n",bckpInfoFiles[i]);
+    for (i=0; bckpInfoFiles[i] != NULL;i++) {
+      printf("\n%s\n",bckpInfoFiles[i]);
+      if (strcmp(bckpInfoFiles[i],src->d_name) == 0) {
+	found = -1;
+	break;
+      }
+    }
+    if(found == 0) {
+      return FILES_DELETED;
+    }
+    
+  }
+  
+  return NO_FILES_DELETED;
+}
+
+char **loadPrevExistFiles(char *info_path) {
+  char **old_filepaths = malloc(sizeof(char *) * MAX_NR_FOLDERS);
+  char line[PATH_MAX];
+  int info_desc;
+  int i = 0;
+  if ((info_desc = open(info_path, O_RDONLY)) == -1) {
+    perror("open()");
+    exit(-1);
+  }
+  while(loadLine(info_desc, line) != -1) {
+    if (strlen(line) != 1) {
+      char tag[17];
+      char file_name[PATH_MAX];
+      sscanf("<%s> %s", tag, file_name);
+      if (strcmp(tag, "name") == 0) {
+	old_filepaths[i] = malloc(sizeof(char) * PATH_MAX);
+	strcpy(old_filepaths[i], file_name);
+	printf("\n%s\n",old_filepaths[i]);
+	i++;
+      }
+    }
+  }
+  old_filepaths[i]=NULL;
+  return old_filepaths;
+}
+
+/*
+ * return 0 if end of line
+ * return -1 if end of file
+ */
+int loadLine(int file_desc, char *str) {
+  char c;
+  int i = 0;
+  int size = 0;
+  while(1) {
+    size = read(file_desc, &c, 1);
+    if (size == 0) {
+      return -1;
+    }
+    if (c == '\n') {
+      return 0;
+    } else {
+      str[i] = c;
+      i++;
     }
   }
 }
