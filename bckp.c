@@ -1,64 +1,17 @@
-#include <unistd.h>
-#include <stdio.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <limits.h>
-#include <stdlib.h>
-#include <libgen.h>
-#include <dirent.h>
-#include <ctype.h>
-#include <string.h>
-#include <time.h>
-#include <fcntl.h>
-#include <pwd.h>
-#include <sys/wait.h>
-#include <signal.h>
+#include "bckp.h"
+#include "common.h"
+#include "headers.h"
 
-/**
- * macros
- */
-#define MAXBUFFER 1000
-#define TIME_LENGTH 20
-#define NR_TIME_ELEMS 20
-#define _GNU_SOURCE
-#define MAX_NR_FOLDERS 64000
-#define FILES_EQUAL 0 
-#define FILES_DIFFERENT 1
-#define FILES_DELETED 1
-#define NO_FILES_DELETED 0
-
-
-char* createDestFolderName();
-int isFileModified(const char *path_s, const char *path_d);
-int copyFiles(const char *path_s, const char *path_d);
-int fullBackup(char *dest);
-int incrementalBackup(char * dest);
-int updateBackupInfo(const char *dest, const char *name, const struct stat *st);
-int loadDestDirectories();
-int sortDirectories();
-int findPrevFile(char *filePath);
-int isFileTemp(const char *pathname);
-void createBckpInfo(const char *pathname);
-int loadLine(int file_desc, char *str);
-char **loadPrevExistFiles(char *info_path);
-int createBckpInfoDel();
-int createProcess(const char *path_s, const char *path_d);
-void installHandlers();
-void alarmHandler(int signo);
-void sigusr1Handler(int signo);
-void chldHandler(int signo);
-int generateSignalMask(sigset_t *empty_mask);
-
-const char CURR_DIR[] = ".";
-const char FATHER_DIR[] = "..";
+extern const char CURR_DIR[];
+extern const char FATHER_DIR[];
 // array of pathnames of the destination folders created
-char **bckp_directories = NULL;
+extern char **bckp_directories;
 
 // path of the dource 
-char *pathS = NULL;
-char *pathD = NULL;
-DIR *dirS = NULL;
-DIR *dirD = NULL;
+extern char *pathS;
+extern char *pathD;
+extern DIR *dirS;
+extern DIR *dirD;
 
 int alarm_occurred = 0;
 int exit_on_finish = 0;
@@ -187,6 +140,10 @@ int main(int argc, char *argv[]) {
   bckp_dest = createDestFolderName();
   fullBackup(bckp_dest);
   
+  sigset_t sigalarm;
+  sigemptyset(&sigalarm);
+  sigaddset(&sigalarm, SIGALRM);
+  
   while(!exit_on_finish) {
     sigset_t sigset;
     generateSignalMask(&sigset);
@@ -196,9 +153,10 @@ int main(int argc, char *argv[]) {
       perror("fork()");
       exit(-1);
     }
+    
+    sigprocmask(SIG_BLOCK, &sigalarm, NULL);
     if (pid > 0) {
       int ret;
-      printf("Before waitpid\n");
       if (waitpid(pid, &ret, 0) == -1) {
 	perror("waitpid()");
       }
@@ -207,7 +165,7 @@ int main(int argc, char *argv[]) {
 	  write(STDOUT_FILENO,"Incremental backup failed\n", 27);
 	}
       }
-      printf("after wait\n");
+      sigprocmask(SIG_UNBLOCK, &sigalarm, NULL);
       if (alarm_occurred == 0) {
 	sigsuspend(&sigset);
       }
@@ -314,41 +272,6 @@ int isFileModified(const char *path_s, const char *path_d) {
   close(source);
   close(destination);
   return FILES_EQUAL;
-}
-
-int copyFiles(const char *path_s, const char *path_d) {
-  
-  if (isFileTemp(path_s) == -1) {
-    return 0;
-  }
-  int source, destination;
-  char c;
-  
-  // tries to open the files
-  if ((source = open(path_s, O_RDONLY) ) == -1) {
-    perror("open()");
-    exit(-1);
-  }
-  
-  if ((destination = open(path_d, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR | 
-    S_IXUSR | S_IRGRP | S_IROTH)) == -1) {
-    perror("open()");
-  exit(-1);
-    }
-    
-    read(source, &c, 1);
-    do {
-      if (write(destination, &c, 1) == 0) {
-	perror("write()");
-	exit(-1);
-      }
-    } while (read(source, &c, 1));
-    
-    // closes the files compared
-    close(source);
-    close(destination);
-    return 0;
-    
 }
 
 int fullBackup(char * dest) {
@@ -569,83 +492,6 @@ int incrementalBackup(char * dest) {
   exit(0);
 }
 
-
-
-int loadDestDirectories() {
-  bckp_directories = malloc(sizeof(char*) * MAX_NR_FOLDERS);
-  int i = 0;
-  rewinddir(dirD);
-  struct dirent *dest_f;
-  while((dest_f = readdir(dirD)) != NULL) {
-    if (strcmp(dest_f->d_name, CURR_DIR) == 0 || strcmp(dest_f->d_name, 
-      FATHER_DIR) == 0) {
-      continue;
-      }
-      char tmp[PATH_MAX];
-    strcpy(tmp, pathD);
-    strcat(tmp, "/");
-    strcat(tmp, dest_f->d_name);
-    
-    struct stat st;
-    if (lstat(tmp, &st)) {
-      perror("lstat()");
-      exit(-1);
-    }
-    
-    if (S_ISDIR(st.st_mode)) {
-      bckp_directories[i] = malloc(sizeof(char) * PATH_MAX);
-      strcpy(bckp_directories[i], tmp);      
-    } else {
-      continue;
-    }
-    
-    ++i;
-  }
-  
-  bckp_directories[i] = NULL;
-  
-  return sortDirectories();
-}
-
-int sortDirectories() {
-  int i = 0;
-  int j = 0;      
-  char dirTemp[PATH_MAX];
-  if (bckp_directories != NULL) {
-    for(i = 0;bckp_directories[i + 1] != NULL; i++) {
-      for(j = i + 1; bckp_directories[j] != NULL; j++) {
-	int time_i[6];
-	int time_j[6];
-	char dirI[PATH_MAX];
-	strcpy(dirI, basename(bckp_directories[i]));
-	char dirJ[PATH_MAX];
-	strcpy(dirJ, basename(bckp_directories[j]));
-	sscanf(dirI, "%d_%d_%d_%d_%d_%d", &time_i[0], &time_i[1], &time_i[2], 
-	       &time_i[3], &time_i[4], &time_i[5]);
-	sscanf(dirJ, "%d_%d_%d_%d_%d_%d", &time_j[0], &time_j[1], &time_j[2], 
-	       &time_j[3], &time_j[4], &time_j[5]);
-	int a;
-	for (a = 0; a < 6; a++) {
-	  if (time_i[a] < time_j[a]) {
-	    strcpy(dirTemp, bckp_directories[i]);
-	    strcpy(bckp_directories[i], bckp_directories[j]);
-	    strcpy(bckp_directories[j], dirTemp);
-	    break;
-	  } else if (time_i[a] > time_j[a]) {
-	    break;
-	  }
-	}
-      }
-    }
-    
-    return 0;
-  }
-  else {
-    return -1;
-  }
-  
-}
-
 int findPrevFile(char *filePath) {
   
   int i=0;
@@ -676,21 +522,6 @@ int findPrevFile(char *filePath) {
   }
   // return the code used to tell that the file has to be copied
   return FILES_DIFFERENT;
-}
-
-/*
- * return 0 if false, -1 if true
- */
-int isFileTemp(const char *pathname) {
-  if (pathname == NULL) {
-    return 0;
-  } else {
-    if (pathname[strlen(pathname) - 1] == '~') {
-      return -1;
-    } else {
-      return 0;
-    }
-  }
 }
 
 int createBckpInfoDel() {
@@ -775,29 +606,6 @@ char **loadPrevExistFiles(char *info_path) {
   return old_filepaths;
 }
 
-/*
- * return 0 if end of line
- * return -1 if end of file
- */
-int loadLine(int file_desc, char *str) {
-  char c;
-  int i = 0;
-  int size = 0;
-  while(1) {
-    size = read(file_desc, &c, 1);
-    if (size == 0) {
-      return -1;
-    }
-    if (c == '\n') {
-      str[i] = '\0';
-      return 0;
-    } else {
-      str[i] = c;
-      i++;
-    }
-  }
-}
-
 void createBckpInfo(const char *pathname) {
   struct dirent *src = NULL;
   rewinddir(dirS);
@@ -828,27 +636,6 @@ void createBckpInfo(const char *pathname) {
     strcat(tmp_d,src->d_name);
     updateBackupInfo(pathname, src->d_name, &st_src);
   }
-}
-
-int createProcess(const char *path_s, const char *path_d) {
-  
-  pid_t pid;
-  
-  pid = fork();
-  
-  if (pid == -1) {	//if fork returned an error
-    perror("fork()");
-    exit(-1);
-  }
-  else if (pid != 0) {		//if parent process wait for child to terminate
-    return 0;
-  }
-  else {		//if child process executes the backup
-    copyFiles(path_s, path_d);
-    exit(0);
-  }
-  
-  return 0;
 }
 
 void installHandlers() {
@@ -895,7 +682,6 @@ int generateSignalMask(sigset_t *empty_mask) {
 }
 
 void chldHandler(int signo) {
-  printf("Child Handler\n");
   int ret = 0;
   wait(&ret);
   if (ret == -1) {
