@@ -70,14 +70,14 @@ int exit_on_finish = 0;
  */
 
 
-char ident_name[] = "<name> ";
-int size_ident_name = 7;
-char ident_owner[] = "<owner> ";
-int size_ident_owner = 8;
-char ident_size[] = "<size(bytes)> ";
-int size_ident_size = 14;
-char ident_modified[] = "<last_modified> ";
-int size_ident_modified = 16;
+const char ident_name[] = "<name> ";
+const int size_ident_name = 7;
+const char ident_owner[] = "<owner> ";
+const int size_ident_owner = 8;
+const char ident_size[] = "<size(bytes)> ";
+const int size_ident_size = 14;
+const char ident_modified[] = "<last_modified> ";
+const int size_ident_modified = 16;
 
 
 int main(int argc, char *argv[]) {
@@ -88,7 +88,7 @@ int main(int argc, char *argv[]) {
   umask(~(S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP |S_IROTH));
   
   // call the function to initialize the signal handlers
-  void installHandlers();
+  installHandlers();
   
   /**
    * arguments verification
@@ -196,18 +196,29 @@ int main(int argc, char *argv[]) {
       perror("fork()");
       exit(-1);
     }
-    if (pid != 0) {
-      sigsuspend(&sigset);
-      if (waitpid(pid, NULL, 0) == -1) {
+    if (pid > 0) {
+      int ret;
+      printf("Before waitpid\n");
+      if (waitpid(pid, &ret, 0) == -1) {
 	perror("waitpid()");
       }
+      else {
+	if (!WIFEXITED(ret)) {
+	  write(STDOUT_FILENO,"Incremental backup failed\n", 27);
+	}
+      }
+      printf("after wait\n");
       if (alarm_occurred == 0) {
 	sigsuspend(&sigset);
+      }
+      else if (alarm_occurred == -1) {
+	alarm_occurred = 0;
       }
     } else {
       free(bckp_dest);
       bckp_dest = createDestFolderName();
       incrementalBackup(bckp_dest);
+      exit(0);
     }
   }
   
@@ -233,7 +244,7 @@ char* createDestFolderName() {
   
   char dir_name[TIME_LENGTH];
   
-  if (sprintf(dir_name, "%d_%d_%d_%d_%d_%d", local_time->tm_year + 1900, 
+  if (sprintf(dir_name, "%4d_%2d_%2d_%2d_%2d_%2d", local_time->tm_year + 1900, 
     local_time->tm_mon + 1,
     local_time->tm_mday, local_time->tm_hour, local_time->tm_min, 
     local_time->tm_sec ) >= NR_TIME_ELEMS) {
@@ -343,7 +354,7 @@ int copyFiles(const char *path_s, const char *path_d) {
 int fullBackup(char * dest) {
   sigset_t a_sigset, o_sigset;
   sigemptyset(&a_sigset);
-  sigaddset(SIGCHLD, &a_sigset);
+  sigaddset(&a_sigset,SIGCHLD);
   
   sigprocmask(SIG_UNBLOCK, &a_sigset, &o_sigset);
   
@@ -388,6 +399,11 @@ int fullBackup(char * dest) {
   }
   
   sigprocmask(SIG_UNBLOCK, &o_sigset, NULL);
+  
+  struct sigaction def_sigchld_handler;
+  def_sigchld_handler.sa_handler = SIG_DFL;
+  
+  sigaction(SIGCHLD, &def_sigchld_handler, NULL);
   return 0;
 }
 
@@ -478,7 +494,7 @@ int incrementalBackup(char * dest) {
   
   sigset_t sigset;
   sigemptyset(&sigset);
-  sigaddset(SIGCHLD, &sigset);
+  sigaddset(&sigset, SIGCHLD);
   
   sigprocmask(SIG_UNBLOCK, &sigset, NULL);
   
@@ -836,22 +852,25 @@ int createProcess(const char *path_s, const char *path_d) {
 }
 
 void installHandlers() {
-  old_alarm_handler = malloc(sizeof(struct sigaction));
+  
   
   sigset_t sigset;
   generateSignalMask(&sigset);
   
-  struct sigaction new_handler;
-  new_handler.sa_mask = sigset;
+  struct sigaction new_alarm_handler;
+  struct sigaction new_sigusr1_handler;
   
-  new_handler.sa_handler = alarmHandler;
-  if(sigaction(SIGALRM, &new_alarm_handler, NULL) {
+  new_alarm_handler.sa_mask = sigset;
+  new_sigusr1_handler.sa_mask = sigset;
+  
+  new_alarm_handler.sa_handler = alarmHandler;
+  if(sigaction(SIGALRM, &new_alarm_handler, NULL)) {
     perror("sigaction()");
     exit(-1);
   }
   
-  new_handler.sa_handler = sigusr1Handler;
-  if(sigaction(SIGUSR1, &new_alarm_handler, NULL) {
+  new_sigusr1_handler.sa_handler = sigusr1Handler;
+  if(sigaction(SIGUSR1, &new_sigusr1_handler, NULL)) {
     perror("sigaction()");
     exit(-1);
   }
@@ -876,6 +895,7 @@ int generateSignalMask(sigset_t *empty_mask) {
 }
 
 void chldHandler(int signo) {
+  printf("Child Handler\n");
   int ret = 0;
   wait(&ret);
   if (ret == -1) {
@@ -891,6 +911,7 @@ void exitHandler(void) {
   closedir(dirS);
   closedir(dirD);
   
-  sigaction(SIGUSR1, SIG_DFL, NULL);
-  free(old_alarm_handler);
+  struct sigaction new_handler;
+  new_handler.sa_handler = SIG_DFL;
+  sigaction(SIGUSR1, &new_handler, NULL);
 }
