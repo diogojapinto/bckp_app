@@ -12,6 +12,7 @@
 #include <fcntl.h>
 #include <pwd.h>
 #include <sys/wait.h>
+#include <signal.h>
 
 /**
  * macros
@@ -25,9 +26,6 @@
 #define FILES_DIFFERENT 1
 #define FILES_DELETED 1
 #define NO_FILES_DELETED 0
-
-const char CURR_DIR[] = ".";
-const char FATHER_DIR[] = "..";
 
 
 char* createDestFolderName();
@@ -45,7 +43,14 @@ int loadLine(int file_desc, char *str);
 char **loadPrevExistFiles(char *info_path);
 int createBckpInfoDel();
 int createProcess(const char *path_s, const char *path_d);
+void installHandlers();
+void alarmHandler(int signo);
+void sigusr1Handler(int signo);
+void chldHandler(int signo);
+int generateSignalMask(sigset_t *empty_mask);
 
+const char CURR_DIR[] = ".";
+const char FATHER_DIR[] = "..";
 // array of pathnames of the destination folders created
 char **bckp_directories = NULL;
 
@@ -54,6 +59,10 @@ char *pathS = NULL;
 char *pathD = NULL;
 DIR *dirS = NULL;
 DIR *dirD = NULL;
+
+int alarm_occurred = 0;
+int exit_on_finish = 0;
+
 /**
  * TO ADD:
  * -> the sleep is done in a process, and copy by other... verify if copy is done (handler for sigchld)
@@ -77,6 +86,9 @@ int main(int argc, char *argv[]) {
   // current user
   //setbuf(stdout, NULL);
   umask(~(S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP |S_IROTH));
+  
+  // call the function to initialize the signal handlers
+  void installHandlers();
   
   /**
    * arguments verification
@@ -156,10 +168,6 @@ int main(int argc, char *argv[]) {
     }
   }
   
-  /*if (dirD_exists == 0) {
-   *   printf("created folder %s\n", pathD);
-}*/
-  
   strcpy(pathD, tmp);
   
   if ((dirS = opendir(pathS)) == NULL) {
@@ -175,14 +183,32 @@ int main(int argc, char *argv[]) {
    */
   
   // performs a full backup
-  char* bckp_dest = createDestFolderName();
+  char* bckp_dest;
+  bckp_dest = createDestFolderName();
   fullBackup(bckp_dest);
   
-  while(1) {
-    sleep(time_frame);
-    free(bckp_dest);
-    bckp_dest = createDestFolderName();
-    incrementalBackup(bckp_dest);
+  while(!exit_on_finish) {
+    sigset_t sigset;
+    generateSignalMask(&sigset);
+    alarm(time_frame);
+    pid_t pid;
+    if ((pid = fork()) == -1) {
+      perror("fork()");
+      exit(-1);
+    }
+    if (pid != 0) {
+      sigsuspend(&sigset);
+      if (waitpid(pid, NULL, 0) == -1) {
+	perror("waitpid()");
+      }
+      if (alarm_occurred == 0) {
+	sigsuspend(&sigset);
+      }
+    } else {
+      free(bckp_dest);
+      bckp_dest = createDestFolderName();
+      incrementalBackup(bckp_dest);
+    }
   }
   
   return 0;
@@ -315,6 +341,17 @@ int copyFiles(const char *path_s, const char *path_d) {
 }
 
 int fullBackup(char * dest) {
+  sigset_t a_sigset, o_sigset;
+  sigemptyset(&a_sigset);
+  sigaddset(SIGCHLD, &a_sigset);
+  
+  sigprocmask(SIG_UNBLOCK, &a_sigset, &o_sigset);
+  
+  struct sigaction sigchld_handler;
+  sigchld_handler.sa_handler = chldHandler;
+  
+  sigaction(SIGCHLD, &sigchld_handler, NULL);
+  
   struct dirent *src = NULL;
   rewinddir(dirD);
   
@@ -350,6 +387,7 @@ int fullBackup(char * dest) {
     updateBackupInfo(dest, src->d_name, &st_src);
   }
   
+  sigprocmask(SIG_UNBLOCK, &o_sigset, NULL);
   return 0;
 }
 
@@ -438,6 +476,17 @@ int incrementalBackup(char * dest) {
   // if -1, already exists
   int state_dest = 0;
   
+  sigset_t sigset;
+  sigemptyset(&sigset);
+  sigaddset(SIGCHLD, &sigset);
+  
+  sigprocmask(SIG_UNBLOCK, &sigset, NULL);
+  
+  struct sigaction sigchld_handler;
+  sigchld_handler.sa_handler = chldHandler;
+  
+  sigaction(SIGCHLD, &sigchld_handler, NULL);
+  
   if (bckp_directories != NULL) {
     int i = 0;
     while(bckp_directories[i] != NULL) {
@@ -501,7 +550,7 @@ int incrementalBackup(char * dest) {
     }
   }
   
-  return 0;
+  exit(0);
 }
 
 
@@ -775,18 +824,64 @@ int createProcess(const char *path_s, const char *path_d) {
     perror("fork()");
     exit(-1);
   }
-  else if (pid == 0) {		//if parent process wait for child to terminate
-    int *status = NULL;
-    if (waitpid(pid,status,0) == -1) {
-      perror("waitpid");
-      exit(-1);
-    }
+  else if (pid != 0) {		//if parent process wait for child to terminate
+    return 0;
   }
   else {		//if child process executes the backup
-    return copyFiles(path_s, path_d);
+    copyFiles(path_s, path_d);
+    exit(0);
   }
   
   return 0;
+}
+
+void installHandlers() {
+  old_alarm_handler = malloc(sizeof(struct sigaction));
+  
+  sigset_t sigset;
+  generateSignalMask(&sigset);
+  
+  struct sigaction new_handler;
+  new_handler.sa_mask = sigset;
+  
+  new_handler.sa_handler = alarmHandler;
+  if(sigaction(SIGALRM, &new_alarm_handler, NULL) {
+    perror("sigaction()");
+    exit(-1);
+  }
+  
+  new_handler.sa_handler = sigusr1Handler;
+  if(sigaction(SIGUSR1, &new_alarm_handler, NULL) {
+    perror("sigaction()");
+    exit(-1);
+  }
+}
+
+void alarmHandler(int signo) {
+  alarm_occurred = -1;
+}
+
+void sigusr1Handler(int signo) {
+  exit_on_finish = -1;
+}
+
+int generateSignalMask(sigset_t *empty_mask) {
+  sigfillset(empty_mask);
+  sigdelset(empty_mask, SIGALRM);
+  sigdelset(empty_mask, SIGUSR1);
+  sigdelset(empty_mask, SIGKILL);
+  sigdelset(empty_mask, SIGSTOP);
+  
+  return 0;
+}
+
+void chldHandler(int signo) {
+  int ret = 0;
+  wait(&ret);
+  if (ret == -1) {
+    write(STDOUT_FILENO, "Copy of files failed without possible recovery.\n", 49);
+    exit(-1);
+  }
 }
 
 void exitHandler(void) {
@@ -795,4 +890,7 @@ void exitHandler(void) {
   free(bckp_directories);
   closedir(dirS);
   closedir(dirD);
+  
+  sigaction(SIGUSR1, SIG_DFL, NULL);
+  free(old_alarm_handler);
 }
