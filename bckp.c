@@ -290,7 +290,7 @@ int fullBackup(char * dest) {
   rewinddir(dirD);
   
   if (mkdir(dest, S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IROTH)) {
-    perror("mkdir1()");
+    perror("mkdir()");
     exit(-1);
   }
   
@@ -467,7 +467,7 @@ int incrementalBackup(char * dest) {
     if (findPrevFile(tmp_s) == FILES_DIFFERENT) {
       if (state_dest == 0) {
 	if (mkdir(dest, S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IROTH)) {
-	  perror("mkdir2()");
+	  perror("mkdir()");
 	  exit(-1);
 	}
 	state_dest = -1;
@@ -482,7 +482,7 @@ int incrementalBackup(char * dest) {
   else if (state_dest == 0) {
     if (createBckpInfoDel() == FILES_DELETED) {
       if (mkdir(dest, S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IROTH)) {
-	perror("mkdir3()");
+	perror("mkdir()");
 	exit(-1);
       }
       createBckpInfo(dest);
@@ -594,7 +594,7 @@ char **loadPrevExistFiles(char *info_path) {
     if (strlen(line) != 1) {
       char tag[17];
       char file_name[PATH_MAX];
-      sscanf(line, "%s %s", tag, file_name);
+      sscanf(line, "%s %[^n]s", tag, file_name);
       if (strcmp(tag, "<name>") == 0) {
 	old_filepaths[i] = malloc(sizeof(char) * PATH_MAX);
 	strcpy(old_filepaths[i], file_name);
