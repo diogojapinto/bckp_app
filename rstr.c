@@ -28,10 +28,17 @@ extern char *pathD;
 extern DIR *dirS;
 extern DIR *dirD;
 
-// structures needed to address the files
-char **time_folder;
+// array with the time (= basename(pathname)) of each backup
+char **time_folders;
+
+// array with the files discriminated in the __bckpinfo__ on each time of backup
 char ***files_on_folder;
+
+// array with the agregation of all the files saved through the backup
 char **existing_files;
+
+// array with the existing files' location (folder) on each frame of backup (it was modified or created at that time)
+char *** files_location;
 
 int main(int argc, char **argv) {
   // sets the umask, to make shure it is possible to create the files as the
@@ -55,8 +62,8 @@ int main(int argc, char **argv) {
   
   pathS = malloc(sizeof(char) * PATH_MAX);
   pathD = malloc(sizeof(char) * PATH_MAX);
-  strcpy(pathS, argv[1]);
-  strcpy(pathD, argv[2]);
+  strcpy(pathS, argv[2]);
+  strcpy(pathD, argv[1]);
   
   char *tmp = malloc(sizeof(char)*PATH_MAX);
   
@@ -124,15 +131,20 @@ int main(int argc, char **argv) {
   
   return 0;
 }
+
 void fillExistingFiles(char *path) {
   
   DIR *bckp_dir;
   struct dirent *bckp = NULL;
   existing_files = malloc(sizeof(char*) * MAX_NR_FOLDERS);
   
-  bckp_dir = opendir(path);
+  if ((bckp_dir = opendir(path)) == NULL) {
+    perror("opendir()");
+    exit(-1);
+  }
   
-  while ((bckp = readdir(bckp_dir)) != NULL) {	//le o directorio com os backups
+  // read the time frames backup directories
+  while ((bckp = readdir(bckp_dir)) != NULL) {
     
     struct stat st_bckp;
     
@@ -159,15 +171,22 @@ void fillExistingFiles(char *path) {
       strcpy(base1, basename(tmp_b));		//procura o nome no existing_files, se nao encontrar adiciona ao existing_files
       strcpy(base, basename(existing_files[j]));
       if ((strcmp(base,base1) == 0) || (strcmp(base1,"__bckpinfo__") == 0)){
-	printf("%s\n", base1);
 	found = -1;
+	int i = 0;
+	while (files_location[j][i] != NULL) {
+	  i++;
+	}
+	files_location[j][i] = malloc(sizeof(char) * PATH_MAX);
+	strcpy(files_location[j][i], basename(path));
 	break;
       }
     }
     if (found == 0) {
       existing_files[j] = malloc(sizeof(char) * PATH_MAX);
       strcpy(existing_files[j], tmp_b);
-      printf("\n%s\n",existing_files[j]);
+      files_location[j] = malloc(sizeof(char*) * MAX_NR_FOLDERS);
+      files_location[j][0] = malloc(sizeof(char) * PATH_MAX);
+      strcpy(files_location[j][0], basename(path));
     }
   }
 }
@@ -177,24 +196,19 @@ void fillFilesOnFolder(char *path, int i) {
   char line[PATH_MAX];
   int fd=0;
   int j=0;
-  if ((fd= open(path, O_RDONLY)) == -1) {
+  if ((fd = open(path, O_RDONLY)) == -1) {
     perror("open()");
     exit(-1);
   }
   
-  printf("1\n");
   files_on_folder[i] = malloc(sizeof(char*) * MAX_NR_FOLDERS);
   
-  printf("2\n");
-  
   while (loadLine(fd, line) != -1) {
-    printf("4\n");    
     if (strlen(line) != 1) {
       char tag[17];
       char file_name[PATH_MAX];
       sscanf(line, "%s %s", tag, file_name);
       if (strcmp(tag, "<name>") == 0) {
-	printf("3\n");
 	files_on_folder[i][j] = malloc(sizeof(char) * PATH_MAX);	//le a linha se for nome adiciona a ij
 	strcpy(files_on_folder[i][j], file_name);
 	j++;
@@ -205,35 +219,29 @@ void fillFilesOnFolder(char *path, int i) {
 
 int fillStructures() {
   
-  
+  // initializes the base pointers of the structures
   loadDestDirectories();
-  int i = 0;
-  time_folder = malloc(sizeof(char*) * MAX_NR_FOLDERS);
+  time_folders = malloc(sizeof(char*) * MAX_NR_FOLDERS);
   files_on_folder = malloc(sizeof(char**) * MAX_NR_FOLDERS);
+  existing_files = malloc(sizeof(char*) * MAX_NR_FOLDERS);
+  files_location = malloc(sizeof(char**) * MAX_NR_FOLDERS);
+  
+  int i = 0;
   for(i=0; bckp_directories[i] != NULL; i++) {
     
-    //fill time_folder
-    time_folder[i] = malloc(sizeof(char) * PATH_MAX);
-    strcpy(time_folder[i], basename(bckp_directories[i]));
+    //fill time_folders
+    time_folders[i] = malloc(sizeof(char) * PATH_MAX);
+    strcpy(time_folders[i], basename(bckp_directories[i]));
+    
+    // saves the pathname of the bckpinfo file for use
+    char tmp[PATH_MAX];
+    sprintf(tmp, "%s\%s", bckp_directories[i], "__bckpinfo__");
     
     //fill files_on_folder
-    fillFilesOnFolder(bckp_directories[i],i);
+    fillFilesOnFolder(tmp,i);
     
     //fill existing_files
     fillExistingFiles(bckp_directories[i]);
   }
   return 0;
-}
-
-int verifyIfValidFolder(char *pathname) {			//move to common and add to load prev?
-if (pathname == NULL) {
-  return 0;
-} else {
-  int time[6];
-  if (sscanf(pathname, "%4d_%2d_%2d_%2d_%2d_%2d", &time[0], &time[1], &time[2], &time[3], &time[4], &time[5]) == 6) {
-    return -1;
-  } else {
-    return 0;
-  }
-}
 }

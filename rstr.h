@@ -2,6 +2,7 @@
 #define RSTR_H
 
 int fillStructures();
-int verifyIfValidFolder(char *pathname);
+void fillExistingFiles(char *path);
+void fillFilesOnFolder(char *path, int i);
 
 #endif

@@ -62,6 +62,10 @@ int loadDestDirectories() {
     strcat(tmp, "/");
     strcat(tmp, dest_f->d_name);
     
+    if (!verifyIfValidFolder(tmp)) {
+      continue;
+    }
+    
     struct stat st;
     if (lstat(tmp, &st)) {
       perror("lstat()");
@@ -113,7 +117,6 @@ int sortDirectories() {
 	}
       }
     }
-    
     return 0;
   }
   else {
@@ -173,6 +176,22 @@ int isFileTemp(const char *pathname) {
     return 0;
   } else {
     if (pathname[strlen(pathname) - 1] == '~') {
+      return -1;
+    } else {
+      return 0;
+    }
+  }
+}
+
+int verifyIfValidFolder(char *pathname) {
+  char tmp[PATH_MAX];
+  strcpy(tmp, basename(pathname));
+  if (pathname == NULL) {
+    return 0;
+  } else {
+    int i = 0;
+    int time[6];
+    if ((i = sscanf(tmp, "%d_%d_%d_%d_%d_%d", &time[0], &time[1], &time[2], &time[3], &time[4], &time[5])) == 6) {
       return -1;
     } else {
       return 0;

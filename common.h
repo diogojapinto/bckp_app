@@ -19,5 +19,6 @@ int loadLine(int file_desc, char *str);
 char **loadPrevExistFiles(char *info_path);
 int createProcess(const char *path_s, const char *path_d);
 int isFileTemp(const char *pathname);
+int verifyIfValidFolder(char *pathname);
 
 #endif
