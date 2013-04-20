@@ -26,7 +26,7 @@ int copyFiles(const char *path_s, const char *path_d) {
     exit(-1);
   }
   
-  if ((destination = open(path_d, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR | 
+  if ((destination = open(path_d, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | 
     S_IXUSR | S_IRGRP | S_IROTH)) == -1) {
     perror("open()");
   exit(-1);

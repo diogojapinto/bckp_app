@@ -1,11 +1,3 @@
-/**
- * Esta me a dar segfault no files on folder, dentro do loadline. Ve o printf que fiz no load line, se fizer com um 
- * numero aquilo manda um monte deles, se fizer printf do char lido ele da logo segfault
- * ve a estrutura daquilo, eu penso que assim carrega as informcaoes necessarias para as 3, as outras duas ja
- * testado e estava bem, so nao confirmei a filesonfolder por causa do segfault
- * 
- */
-
 
 #include "common.h"
 #include "rstr.h"
@@ -28,6 +20,9 @@ extern char *pathD;
 extern DIR *dirS;
 extern DIR *dirD;
 
+clock_t start, end;
+struct tms t;
+
 // array with the time (= basename(pathname)) of each backup
 char **time_folders;
 
@@ -41,10 +36,17 @@ char **existing_files;
 char *** files_location;
 
 int main(int argc, char **argv) {
+  //setbuf(stdout, NULL);
+  
   // sets the umask, to make shure it is possible to create the files as the
   // current user
-  setbuf(stdout, NULL);
   umask(~(S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP |S_IROTH));
+  
+  // sets the exit handler that frees the dinamically allocated memory and closes open directories
+  if (atexit(exitHandler)) {
+    perror("exit()");
+    exit(-1);
+  }
   
   /**
    * arguments verification
@@ -52,8 +54,7 @@ int main(int argc, char **argv) {
   
   // if the program was not used correctly:
   if (argc != 3) {
-    printf("usage: %s <source-directory> <destination-directory> ",argv[0]); 
-    printf("<time-interval-between-backups>\n");
+    printf("usage: %s <source-directory> <destination-directory> \n",argv[0]);
     exit(-1);
   }
   
@@ -126,8 +127,11 @@ int main(int argc, char **argv) {
   /**
    * end of arguments verification
    */
-
+  
   fillStructures();
+  
+  int index =  askTimeFrame();
+  restoreBckpFiles(index);
   
   return 0;
 }
@@ -244,4 +248,132 @@ int fillStructures() {
     fillExistingFiles(bckp_directories[i]);
   }
   return 0;
+}
+
+int askTimeFrame() {
+  long choice;
+  write(STDOUT_FILENO, "List of available restore points (yyyy-mm-dd-hh-mm-ss)\n", 56);
+  int i = 0;
+  for (i = 0; time_folders[i] != NULL; i++) {
+    char tmp[5];
+    sprintf(tmp, "(%d) ", i + 1);
+    write(STDOUT_FILENO, time_folders[i], strlen(time_folders[i]) + 1);
+    write(STDOUT_FILENO, "\n", 2);
+  }
+  
+  while(1) {
+    char s[5];
+    choice = 0;
+    read(STDIN_FILENO, s, 5);
+    choice = strtol(s, NULL, 10);
+    if (choice == 0 || choice > i) {
+      write(STDOUT_FILENO, "Invalid input\n", 15);
+    } else {
+      break;
+    }
+  }
+  return choice - 1;
+}
+
+void restoreBckpFiles(int index) {
+  // isntalls the SIGCHLD signal handler
+  struct sigaction sigchld_handler;
+  sigchld_handler.sa_handler = chldHandler;
+  
+  sigaction(SIGCHLD, &sigchld_handler, NULL);
+  
+  // records the time taken by the task
+  start = times(&t);
+  long ticks = sysconf(_SC_CLK_TCK);
+  
+  // saves locally the folder path
+  char time_frame[PATH_MAX];
+  strcpy(time_frame, time_folders[index]);
+  
+  // for each file saved at that moment (on __bckpinfo__)
+  int i = 0;
+  for(; files_on_folder[index][i] != NULL; i++) {
+    // find the locations of that file
+    int files_index = 0;
+    while(existing_files[files_index] != NULL) {
+      if (strcmp(existing_files[files_index], files_on_folder[index][files_index]) == 0) {
+	break;
+      } else {
+	files_index++;
+      }
+    }
+    // and verify which is the location equal or immediately before that time frame
+    // on which the file was saved
+    int k = 0;
+    while (files_location[files_index][k] != NULL) {
+      // as the folders are ordered from newest to oldest, the first folder to 
+      // hold the file and have the time equal or before the time of desired backup
+      // is the file to be copied
+      int is_data_valid = strcmp(files_location[files_index][k], time_frame);
+      if (is_data_valid <= 0) {
+	break;
+      } else {
+	k++;
+      }
+    }
+    
+    // now copy the files
+    char src_file[PATH_MAX];
+    char dest_file[PATH_MAX];
+    sprintf(src_file, "%s/%s/%s", pathD, files_location[files_index][k], existing_files[files_index]);
+    sprintf(src_file, "%s/%s", pathS,  files_on_folder[index][i]);
+    
+    createProcess(src_file, dest_file);
+  }
+  
+  // print information about the time it took to the process
+  end = times(&t);
+  printf("Restore done in %4.2f seconds.\n", (double)(end - start) / ticks);
+  printf("Main process took %4.2f seconds (%4.2f user, %4.2f system).\n", (double)(t.tms_utime +  t.tms_stime) / ticks, (double)t.tms_utime/ ticks, (double)t.tms_stime / ticks);
+  printf("Children took %4.2f seconds globaly (%4.2f user, %4.2f system).\n", (double)(t.tms_cutime +  t.tms_cstime) / ticks, (double)t.tms_cutime/ ticks, (double)t.tms_cstime / ticks);
+}
+
+void chldHandler(int signo) {
+  int ret = 0;
+  wait(&ret);
+  if (ret == -1) {
+    write(STDOUT_FILENO, "Copy of files failed without possible recovery.\n", 49);
+    exit(-1);
+  }
+}
+
+void exitHandler(void) {
+  free(pathS);
+  free(pathD);
+  free(bckp_directories);
+  closedir(dirS);
+  closedir(dirD);
+  
+  int i = 0, j = 0;
+  
+  for (i = 0; time_folders[i] != NULL; i++) {
+    free(time_folders[i]);
+  }
+  free(time_folders);
+  
+  for (i = 0; existing_files[i] != NULL; i++) {
+    free(existing_files[i]);
+  }
+  free(existing_files);
+  
+  for (i = 0; files_on_folder[i] != NULL; i++) {
+    for (j = 0; files_on_folder[i][j] != NULL; j++) {
+      free(files_on_folder[i][j]);
+    }
+    free(files_on_folder[i]);
+  }
+  free(files_on_folder);
+  
+  for (i = 0; files_location[i] != NULL; i++) {
+    for (j = 0; files_location[i][j] != NULL; j++) {
+      free(files_location[i][j]);
+    }
+    free(files_location[i]);
+  }
+  free(files_location);  
 }

@@ -21,5 +21,6 @@ void alarmHandler(int signo);
 void sigusr1Handler(int signo);
 void chldHandler(int signo);
 int generateSignalMask(sigset_t *empty_mask);
+void exitHandler(void);
 
 #endif

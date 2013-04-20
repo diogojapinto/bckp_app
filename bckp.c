@@ -16,13 +16,6 @@ extern DIR *dirD;
 int alarm_occurred = 0;
 int exit_on_finish = 0;
 
-/**
- * TO ADD:
- * -> the sleep is done in a process, and copy by other... verify if copy is done (handler for sigchld)
- * don't forget the return value of sleep (if != 0, do sleep/ALARM of remaining time)
- */
-
-
 const char ident_name[] = "<name> ";
 const int size_ident_name = 7;
 const char ident_owner[] = "<owner> ";
@@ -34,11 +27,18 @@ const int size_ident_modified = 16;
 
 
 int main(int argc, char *argv[]) {
+  //setbuf(stdout, NULL);
   
   // sets the umask, to make shure it is possible to create the files as the
   // current user
   //setbuf(stdout, NULL);
   umask(~(S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP |S_IROTH));
+  
+  // sets the exit handler that frees the dinamically allocated memory and closes open directories
+  if (atexit(exitHandler)) {
+    perror("exit()");
+    exit(-1);
+  }
   
   // call the function to initialize the signal handlers
   installHandlers();
