@@ -187,7 +187,7 @@ void fillExistingFiles(char *path) {
     }
     if (found == 0) {
       existing_files[j] = malloc(sizeof(char) * PATH_MAX);
-      strcpy(existing_files[j], tmp_b);
+      strcpy(existing_files[j], basename(tmp_b));
       files_location[j] = malloc(sizeof(char*) * MAX_NR_FOLDERS);
       files_location[j][0] = malloc(sizeof(char) * PATH_MAX);
       strcpy(files_location[j][0], basename(path));
@@ -211,7 +211,7 @@ void fillFilesOnFolder(char *path, int i) {
     if (strlen(line) != 1) {
       char tag[17];
       char file_name[PATH_MAX];
-      sscanf(line, "%s %s", tag, file_name);
+      sscanf(line, "%s %[^\n]s", tag, file_name);
       if (strcmp(tag, "<name>") == 0) {
 	files_on_folder[i][j] = malloc(sizeof(char) * PATH_MAX);	//le a linha se for nome adiciona a ij
 	strcpy(files_on_folder[i][j], file_name);
@@ -225,6 +225,7 @@ int fillStructures() {
   
   // initializes the base pointers of the structures
   loadDestDirectories();
+  
   time_folders = malloc(sizeof(char*) * MAX_NR_FOLDERS);
   files_on_folder = malloc(sizeof(char**) * MAX_NR_FOLDERS);
   existing_files = malloc(sizeof(char*) * MAX_NR_FOLDERS);
@@ -239,7 +240,7 @@ int fillStructures() {
     
     // saves the pathname of the bckpinfo file for use
     char tmp[PATH_MAX];
-    sprintf(tmp, "%s\%s", bckp_directories[i], "__bckpinfo__");
+    sprintf(tmp, "%s\%s", bckp_directories[i], "/__bckpinfo__");
     
     //fill files_on_folder
     fillFilesOnFolder(tmp,i);
@@ -247,6 +248,7 @@ int fillStructures() {
     //fill existing_files
     fillExistingFiles(bckp_directories[i]);
   }
+  
   return 0;
 }
 
@@ -257,6 +259,7 @@ int askTimeFrame() {
   for (i = 0; time_folders[i] != NULL; i++) {
     char tmp[5];
     sprintf(tmp, "(%d) ", i + 1);
+    write(STDOUT_FILENO, tmp, 5);
     write(STDOUT_FILENO, time_folders[i], strlen(time_folders[i]) + 1);
     write(STDOUT_FILENO, "\n", 2);
   }
@@ -320,8 +323,10 @@ void restoreBckpFiles(int index) {
     // now copy the files
     char src_file[PATH_MAX];
     char dest_file[PATH_MAX];
-    sprintf(src_file, "%s/%s/%s", pathD, files_location[files_index][k], existing_files[files_index]);
-    sprintf(src_file, "%s/%s", pathS,  files_on_folder[index][i]);
+    sprintf(src_file, "%s/%s/%s", pathD, files_location[files_index][k], files_on_folder[index][i]);
+    sprintf(dest_file, "%s/%s", pathS,  files_on_folder[index][i]);
+    
+    printf("%s\n%s\n\n", src_file, dest_file);
     
     createProcess(src_file, dest_file);
   }
