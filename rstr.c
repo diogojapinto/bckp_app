@@ -3,6 +3,8 @@
 #include "rstr.h"
 #include "headers.h"
 
+
+//tags for __bckpinfo__
 const char ident_name[] = "<name> ";
 const int size_ident_name = 7;
 const char ident_owner[] = "<owner> ";
@@ -14,12 +16,16 @@ const int size_ident_modified = 16;
 
 extern char **bckp_directories;
 
-// path of the dource 
+// path of the source 
 extern char *pathS;
+// path of the destination 
 extern char *pathD;
+// dir of the source 
 extern DIR *dirS;
+// dir of the destination 
 extern DIR *dirD;
 
+//control the time of the restore
 clock_t start, end;
 struct tms t;
 
@@ -70,12 +76,16 @@ int main(int argc, char **argv) {
   
   struct stat temp_dir;
   
+  // create the destination directory if it not exists
+  int dirD_exists = mkdir(pathS, S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | 
+  S_IROTH);
+  
   if (realpath(pathS, tmp) == NULL) {
     perror("realpath()");
     exit(-1);
   }
   
-  
+  if (dirD_exists) {
   if (lstat(tmp, &temp_dir) == -1) {
     perror("lstat()");
     exit(-1);
@@ -88,19 +98,18 @@ int main(int argc, char **argv) {
       exit(-1);
     }
   }
+  }
   
   strcpy(pathS, tmp);
   
-  // create the destination directory if it not exists
-  int dirD_exists = mkdir(pathD, S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | 
-  S_IROTH);
+
   
   if (realpath(pathD, tmp) == NULL) {
     perror("realpath()");
     exit(-1);
   }
   
-  if (dirD_exists) {
+
     if (lstat(tmp, &temp_dir) == -1) {
       perror("lstat()");
       exit(-1);
@@ -112,7 +121,6 @@ int main(int argc, char **argv) {
 	exit(-1);
       }
     }
-  }
   
   strcpy(pathD, tmp);
   
@@ -130,17 +138,9 @@ int main(int argc, char **argv) {
   
   fillStructures();
   
-  /*int a = 0;
-  int b = 0;
-  for (;files_location[a] != NULL; a++) {
-    printf("%s\n", existing_files[a]);
-    for (;files_location[a][b] != NULL; b++) {
-      printf("%s\n", files_location[a][b]);
-    }
-    printf("\n");
-  }*/
-  
+  //ask for a restore point
   int index =  askTimeFrame();
+  //restore backup previously chosen
   restoreBckpFiles(index);
   
   return 0;
@@ -182,7 +182,9 @@ void fillExistingFiles(char *path) {
       continue;
     }
     int j = 0;
-    while(existing_files[j] != NULL) {		//procura o nome no existing_files, se nao encontrar adiciona ao existing_files
+    //search the name of the file in existing_files, if not found adds it
+    //adds to file location the folder where the file was found
+    while(existing_files[j] != NULL) {		
       char base[PATH_MAX];
       strcpy(base, existing_files[j]);
       if (strcmp(base,base1) == 0){
@@ -206,15 +208,6 @@ void fillExistingFiles(char *path) {
       strcpy(files_location[j][0], basename(path));
     }
   }
-  /*int k = 0;
-  for (; existing_files[k]; k++) {
-    printf("%s\n", existing_files[k]);
-    int l = 0;
-    for (; files_location[k][l] != NULL; l++) {
-      printf("%s\n", files_location[k][l]);
-    }
-    printf("\n");
-  }*/
 }
 
 void fillFilesOnFolder(char *path, int i) {
@@ -228,7 +221,7 @@ void fillFilesOnFolder(char *path, int i) {
   }
   
   files_on_folder[i] = malloc(sizeof(char*) * MAX_NR_FOLDERS);
-  
+  //reads __bckpinfo__ line by line and adds the files found to files_on_folder
   while (loadLine(fd, line) != -1) {
     if (strlen(line) != 1) {
       char tag[17];
@@ -350,7 +343,7 @@ void restoreBckpFiles(int index) {
     sprintf(src_file, "%s/%s/%s", pathD, files_location[files_index][k], files_on_folder[index][i]);
     sprintf(dest_file, "%s/%s", pathS,  files_on_folder[index][i]);
     
-   printf("%s\n%s\n\n", src_file, dest_file);
+    printf("Backup Folder:%s\nRestore Folder:%s\n\n", src_file, dest_file);
     
     createProcess(src_file, dest_file);
   }

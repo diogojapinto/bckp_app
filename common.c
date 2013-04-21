@@ -58,6 +58,7 @@ int loadDestDirectories() {
       continue;
       }
       char tmp[PATH_MAX];
+    //prepares the path to check if its valid
     strcpy(tmp, pathD);
     strcat(tmp, "/");
     strcat(tmp, dest_f->d_name);
@@ -72,6 +73,7 @@ int loadDestDirectories() {
       exit(-1);
     }
     
+    //if valid and directory adds the path to bckp_directories
     if (S_ISDIR(st.st_mode)) {
       bckp_directories[i] = malloc(sizeof(char) * PATH_MAX);
       strcpy(bckp_directories[i], tmp);      
@@ -99,12 +101,14 @@ int sortDirectories() {
 	char dirI[PATH_MAX];
 	strcpy(dirI, basename(bckp_directories[i]));
 	char dirJ[PATH_MAX];
+	//reads to paths from bckp_directories
 	strcpy(dirJ, basename(bckp_directories[j]));
 	sscanf(dirI, "%d_%d_%d_%d_%d_%d", &time_i[0], &time_i[1], &time_i[2], 
 	       &time_i[3], &time_i[4], &time_i[5]);
 	sscanf(dirJ, "%d_%d_%d_%d_%d_%d", &time_j[0], &time_j[1], &time_j[2], 
 	       &time_j[3], &time_j[4], &time_j[5]);
 	int a;
+	//compares the times read to sort the paths by descending order
 	for (a = 0; a < 6; a++) {
 	  if (time_i[a] < time_j[a]) {
 	    strcpy(dirTemp, bckp_directories[i]);
@@ -157,7 +161,7 @@ int createProcess(const char *path_s, const char *path_d) {
     perror("fork()");
     exit(-1);
   }
-  else if (pid > 0) {		//if parent process wait for child to terminate
+  else if (pid > 0) {		//if parent process proceeds
     return 0;
   }
   else if (pid == 0) {		//if child process executes the backup
