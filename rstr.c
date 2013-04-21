@@ -130,6 +130,16 @@ int main(int argc, char **argv) {
   
   fillStructures();
   
+  /*int a = 0;
+  int b = 0;
+  for (;files_location[a] != NULL; a++) {
+    printf("%s\n", existing_files[a]);
+    for (;files_location[a][b] != NULL; b++) {
+      printf("%s\n", files_location[a][b]);
+    }
+    printf("\n");
+  }*/
+  
   int index =  askTimeFrame();
   restoreBckpFiles(index);
   
@@ -137,21 +147,17 @@ int main(int argc, char **argv) {
 }
 
 void fillExistingFiles(char *path) {
-  
   DIR *bckp_dir;
   struct dirent *bckp = NULL;
-  existing_files = malloc(sizeof(char*) * MAX_NR_FOLDERS);
   
   if ((bckp_dir = opendir(path)) == NULL) {
     perror("opendir()");
     exit(-1);
   }
-  
   // read the time frames backup directories
   while ((bckp = readdir(bckp_dir)) != NULL) {
     
     struct stat st_bckp;
-    
     // prepares the pathnames
     char tmp_b[PATH_MAX];
     strcpy(tmp_b, path);
@@ -163,18 +169,23 @@ void fillExistingFiles(char *path) {
       perror("lstat()");
       exit(-1);
     }
-    if (!S_ISREG(st_bckp.st_mode)) {
+    if (S_ISREG(st_bckp.st_mode)) {
+    } else {
       continue;
     }
     
-    int j = 0;
     int found = 0;
-    char base[PATH_MAX];
+    
     char base1[PATH_MAX];
-    for (j=0; existing_files[j] != NULL; j++) {
-      strcpy(base1, basename(tmp_b));		//procura o nome no existing_files, se nao encontrar adiciona ao existing_files
-      strcpy(base, basename(existing_files[j]));
-      if ((strcmp(base,base1) == 0) || (strcmp(base1,"__bckpinfo__") == 0)){
+    strcpy(base1, basename(tmp_b));
+    if (strcmp(base1,"__bckpinfo__") == 0) {
+      continue;
+    }
+    int j = 0;
+    while(existing_files[j] != NULL) {		//procura o nome no existing_files, se nao encontrar adiciona ao existing_files
+      char base[PATH_MAX];
+      strcpy(base, existing_files[j]);
+      if (strcmp(base,base1) == 0){
 	found = -1;
 	int i = 0;
 	while (files_location[j][i] != NULL) {
@@ -183,6 +194,8 @@ void fillExistingFiles(char *path) {
 	files_location[j][i] = malloc(sizeof(char) * PATH_MAX);
 	strcpy(files_location[j][i], basename(path));
 	break;
+      } else {
+	j++;
       }
     }
     if (found == 0) {
@@ -193,6 +206,15 @@ void fillExistingFiles(char *path) {
       strcpy(files_location[j][0], basename(path));
     }
   }
+  /*int k = 0;
+  for (; existing_files[k]; k++) {
+    printf("%s\n", existing_files[k]);
+    int l = 0;
+    for (; files_location[k][l] != NULL; l++) {
+      printf("%s\n", files_location[k][l]);
+    }
+    printf("\n");
+  }*/
 }
 
 void fillFilesOnFolder(char *path, int i) {
@@ -278,8 +300,9 @@ int askTimeFrame() {
   return choice - 1;
 }
 
-void restoreBckpFiles(int index) {
-  // isntalls the SIGCHLD signal handler
+void restoreBckpFiles(int index) { 
+  
+  // installs the SIGCHLD signal handler
   struct sigaction sigchld_handler;
   sigchld_handler.sa_handler = chldHandler;
   
@@ -299,7 +322,7 @@ void restoreBckpFiles(int index) {
     // find the locations of that file
     int files_index = 0;
     while(existing_files[files_index] != NULL) {
-      if (strcmp(existing_files[files_index], files_on_folder[index][files_index]) == 0) {
+      if (strcmp(existing_files[files_index], files_on_folder[index][i]) == 0) {
 	break;
       } else {
 	files_index++;
@@ -308,6 +331,7 @@ void restoreBckpFiles(int index) {
     // and verify which is the location equal or immediately before that time frame
     // on which the file was saved
     int k = 0;
+    
     while (files_location[files_index][k] != NULL) {
       // as the folders are ordered from newest to oldest, the first folder to 
       // hold the file and have the time equal or before the time of desired backup
@@ -326,7 +350,7 @@ void restoreBckpFiles(int index) {
     sprintf(src_file, "%s/%s/%s", pathD, files_location[files_index][k], files_on_folder[index][i]);
     sprintf(dest_file, "%s/%s", pathS,  files_on_folder[index][i]);
     
-    printf("%s\n%s\n\n", src_file, dest_file);
+   printf("%s\n%s\n\n", src_file, dest_file);
     
     createProcess(src_file, dest_file);
   }

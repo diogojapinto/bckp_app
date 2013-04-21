@@ -143,12 +143,14 @@ int main(int argc, char *argv[]) {
   sigset_t sigalarm;
   sigemptyset(&sigalarm);
   sigaddset(&sigalarm, SIGALRM);
-  
-  while(!exit_on_finish) {
     sigset_t sigset;
     generateSignalMask(&sigset);
+    
+    sleep(time_frame);
+  
+  while(!exit_on_finish) {
     alarm(time_frame);
-    pid_t pid;
+    pid_t pid = 0;
     if ((pid = fork()) == -1) {
       perror("fork()");
       exit(-1);
@@ -157,6 +159,7 @@ int main(int argc, char *argv[]) {
     sigprocmask(SIG_BLOCK, &sigalarm, NULL);
     if (pid > 0) {
       int ret;
+      sigsuspend(&sigset);
       if (waitpid(pid, &ret, 0) == -1) {
 	perror("waitpid()");
       }
@@ -172,7 +175,7 @@ int main(int argc, char *argv[]) {
       else if (alarm_occurred == -1) {
 	alarm_occurred = 0;
       }
-    } else {
+    } else if (pid == 0) {
       free(bckp_dest);
       bckp_dest = createDestFolderName();
       incrementalBackup(bckp_dest);
@@ -476,17 +479,18 @@ int incrementalBackup(char * dest) {
     }
   }
   
-  if (state_dest == -1) {
-    createBckpInfo(dest);
-  }
-  else if (state_dest == 0) {
+  if (state_dest == 0) {
     if (createBckpInfoDel() == FILES_DELETED) {
       if (mkdir(dest, S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IROTH)) {
 	perror("mkdir()");
 	exit(-1);
       }
-      createBckpInfo(dest);
+      state_dest = -1;
     }
+  }
+  
+  if (state_dest == -1) {
+    createBckpInfo(dest);
   }
   
   exit(0);
@@ -555,13 +559,12 @@ int createBckpInfoDel() {
       } else {
 	continue;
       }
-      
       if (strcmp(bckpInfoFiles[i],src->d_name) == 0) {
 	found = -1; 
 	break;
       }
     }
-    if (!found) {
+    if (found == 0) {
       int a = 0;
       while(bckpInfoFiles[a] != NULL) {
 	free(bckpInfoFiles[a]);
@@ -594,7 +597,7 @@ char **loadPrevExistFiles(char *info_path) {
     if (strlen(line) != 1) {
       char tag[17];
       char file_name[PATH_MAX];
-      sscanf(line, "%s %[^n]s", tag, file_name);
+      sscanf(line, "%s %[^\n]s", tag, file_name);
       if (strcmp(tag, "<name>") == 0) {
 	old_filepaths[i] = malloc(sizeof(char) * PATH_MAX);
 	strcpy(old_filepaths[i], file_name);

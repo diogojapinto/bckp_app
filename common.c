@@ -157,15 +157,15 @@ int createProcess(const char *path_s, const char *path_d) {
     perror("fork()");
     exit(-1);
   }
-  else if (pid != 0) {		//if parent process wait for child to terminate
+  else if (pid > 0) {		//if parent process wait for child to terminate
     return 0;
   }
-  else {		//if child process executes the backup
+  else if (pid == 0) {		//if child process executes the backup
     copyFiles(path_s, path_d);
     exit(0);
   }
   
-  return 0;
+  exit(0);
 }
 
 /*
