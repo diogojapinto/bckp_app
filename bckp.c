@@ -480,7 +480,7 @@ int incrementalBackup(char * dest) {
   }
   
   if (state_dest == 0) {
-    if (createBckpInfoDel() == FILES_DELETED) {
+    if (existsDeletedFiles() == FILES_DELETED) {
       if (mkdir(dest, S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IROTH)) {
 	perror("mkdir()");
 	exit(-1);
@@ -528,7 +528,7 @@ int findPrevFile(char *filePath) {
   return FILES_DIFFERENT;
 }
 
-int createBckpInfoDel() {
+int existsDeletedFiles() {
   char path_info[PATH_MAX];
   strcpy(path_info, bckp_directories[0]);
   strcat(path_info, "/");
@@ -642,8 +642,6 @@ void createBckpInfo(const char *pathname) {
 }
 
 void installHandlers() {
-  
-  
   sigset_t sigset;
   generateSignalMask(&sigset);
   
